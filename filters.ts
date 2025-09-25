@@ -4,355 +4,278 @@ function getRandomInt(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Generate filter that returns approximately the specified number of users (min: targetCount, max: targetCount + 100)
-export function generateUserFilter(
-    targetCount: number = 5000,
-): Record<string, any> {
-    // Calculate percentage ranges based on target count for better accuracy
-    const totalUsers = 100000;
-    const targetPercentage = targetCount / totalUsers;
+// Data distribution analysis results
+interface DataDistribution {
+    totalUsers: number;
+    ageStats: { min: number; max: number; avg: number };
+    salaryStats: { min: number; max: number; avg: number };
+    statusCounts: Record<string, number>;
+    departmentCounts: Record<string, number>;
+    locationCounts: Record<string, number>;
+    managerCount: number;
+    joinDateStats: { min: Date; max: Date };
+    emailDomainCounts: Record<string, number>;
+}
 
-    const filterOptions = [
-        // Age range filters - adjust ranges based on target
-        () => {
-            const ageRange = Math.ceil(targetPercentage * 62); // 62 is max age range (80-18)
-            const startAge = getRandomInt(18, 80 - ageRange);
-            return { age: { $gte: startAge, $lte: startAge + ageRange } };
-        },
+let cachedDistribution: DataDistribution | null = null;
 
-        // Salary range filters - adjust ranges based on target
-        () => {
-            const salaryRange = Math.ceil(targetPercentage * 120000); // 120k is max salary range
-            const minSalary = getRandomInt(30000, 150000 - salaryRange);
-            return {
-                salary: { $gte: minSalary, $lte: minSalary + salaryRange },
-            };
-        },
+// Analyze user data to understand distribution
+export async function analyzeUserDistribution(
+    db: Db,
+): Promise<DataDistribution> {
+    if (cachedDistribution) {
+        return cachedDistribution;
+    }
 
-        // Random property filters - target the generated prop_X fields
-        () => {
-            const propIndex = getRandomInt(0, 39); // prop_0 to prop_39
-            const propName = `prop_${propIndex}`;
+    console.log("Analyzing user data distribution...");
+    const usersCollection = db.collection("users");
 
-            // Different filter types for random properties
-            const filterType = getRandomInt(1, 4);
-            switch (filterType) {
-                case 1: // String exists
-                    return { [propName]: { $exists: true, $type: "string" } };
-                case 2: // Number range
-                    const numRange = Math.ceil(targetPercentage * 5000);
-                    const minNum = getRandomInt(1, 10000 - numRange);
-                    return {
-                        [propName]: { $gte: minNum, $lte: minNum + numRange },
-                    };
-                case 3: // Boolean value
-                    return { [propName]: Math.random() > 0.5 };
-                case 4: // Array exists and has elements
-                    return {
-                        [propName]: { $exists: true, $type: "array", $ne: [] },
-                    };
-                default:
-                    return { [propName]: { $exists: true } };
-            }
-        },
-
-        // Multi-property combinations using random props
-        () => {
-            const prop1 = `prop_${getRandomInt(0, 39)}`;
-            const prop2 = `prop_${getRandomInt(0, 39)}`;
-            return {
-                $and: [
-                    { [prop1]: { $exists: true } },
-                    {
-                        [prop2]: {
-                            $type: "number",
-                            $gte: getRandomInt(1, 5000),
-                        },
-                    },
-                    { age: { $gte: getRandomInt(20, 50) } },
-                ],
-            };
-        },
-
-        // Status filters - roughly 25% each status
-        () => {
-            if (targetPercentage <= 0.25) {
-                return {
-                    status: ["active", "inactive", "pending", "banned"][
-                        getRandomInt(0, 3)
-                    ],
-                };
-            } else if (targetPercentage <= 0.5) {
-                const statuses = ["active", "inactive", "pending", "banned"];
-                return {
-                    status: {
-                        $in: [
-                            statuses[getRandomInt(0, 3)],
-                            statuses[getRandomInt(0, 3)],
-                        ],
-                    },
-                };
-            } else {
-                return { status: { $in: ["active", "pending", "inactive"] } };
-            }
-        },
-
-        // Department filters - roughly 20% each department
-        () => {
-            if (targetPercentage <= 0.2) {
-                return {
-                    department: [
-                        "engineering",
-                        "marketing",
-                        "sales",
-                        "support",
-                        "hr",
-                    ][getRandomInt(0, 4)],
-                };
-            } else if (targetPercentage <= 0.4) {
-                return { department: { $in: ["engineering", "marketing"] } };
-            } else if (targetPercentage <= 0.6) {
-                return {
-                    department: { $in: ["engineering", "marketing", "sales"] },
-                };
-            } else {
-                return {
-                    department: {
-                        $in: ["engineering", "marketing", "sales", "support"],
-                    },
-                };
-            }
-        },
-
-        // Location filters - roughly 20% each location
-        () => {
-            if (targetPercentage <= 0.2) {
-                return {
-                    location: [
-                        "New York",
-                        "San Francisco",
-                        "London",
-                        "Tokyo",
-                        "Berlin",
-                    ][getRandomInt(0, 4)],
-                };
-            } else if (targetPercentage <= 0.4) {
-                return { location: { $in: ["New York", "San Francisco"] } };
-            } else if (targetPercentage <= 0.6) {
-                return {
-                    location: { $in: ["New York", "San Francisco", "London"] },
-                };
-            } else {
-                return {
-                    location: {
-                        $in: ["New York", "San Francisco", "London", "Tokyo"],
-                    },
-                };
-            }
-        },
-
-        // Manager status - roughly 20% are managers
-        () => {
-            if (targetPercentage <= 0.2) {
-                return { isManager: true };
-            } else {
-                return { isManager: false };
-            }
-        },
-
-        // Join date range - distribute across 5 years
-        () => {
-            const yearsRange = Math.ceil(targetPercentage * 5);
-            const endDate = new Date(
-                Date.now() -
-                    getRandomInt(0, (5 - yearsRange) * 365) *
-                        24 *
-                        60 *
-                        60 *
-                        1000,
-            );
-            const startDate = new Date(
-                endDate.getTime() - yearsRange * 365 * 24 * 60 * 60 * 1000,
-            );
-            return {
-                joinDate: {
-                    $gte: startDate,
-                    $lte: endDate,
-                },
-            };
-        },
-
-        // Complex combinations for larger target counts
-        () => {
-            if (targetPercentage <= 0.3) {
-                const ageRange = Math.ceil(targetPercentage * 30) + 15;
-                const minAge = getRandomInt(20, 60);
-                return {
-                    $and: [
-                        { age: { $gte: minAge, $lte: minAge + ageRange } },
-                        { status: { $in: ["active", "pending"] } },
-                        { salary: { $gte: 40000 } },
-                    ],
-                };
-            } else {
-                return {
-                    $and: [
-                        { age: { $gte: 25, $lte: 65 } },
-                        { status: { $in: ["active", "pending", "inactive"] } },
-                        { salary: { $gte: 35000 } },
-                    ],
-                };
-            }
-        },
-
-        () => {
-            if (targetPercentage <= 0.4) {
-                return {
-                    $or: [
-                        { department: "engineering" },
-                        {
-                            $and: [
-                                { isManager: true },
-                                { salary: { $gte: 70000 } },
-                            ],
-                        },
-                    ],
-                };
-            } else {
-                return {
-                    $or: [
-                        { department: { $in: ["engineering", "marketing"] } },
-                        { salary: { $gte: 60000 } },
-                    ],
-                };
-            }
-        },
-
-        // Additional targeted filters for specific ranges
-        () => {
-            const ageMin = getRandomInt(25, 45);
-            const ageMax = ageMin + Math.ceil(targetPercentage * 40);
-            return {
-                $and: [
-                    { age: { $gte: ageMin, $lte: Math.min(ageMax, 80) } },
-                    { location: { $in: ["New York", "San Francisco"] } },
-                ],
-            };
-        },
-
-        // Email domain filters
-        () => {
-            const domains = [
-                "gmail.com",
-                "yahoo.com",
-                "hotmail.com",
-                "company.com",
-                "test.org",
-            ];
-            const selectedDomains = domains.slice(
-                0,
-                Math.ceil(targetPercentage * domains.length) || 1,
-            );
-            const regexPattern = selectedDomains
-                .map((d) => d.replace(".", "\\."))
-                .join("|");
-            return { email: { $regex: `@(${regexPattern})$` } };
-        },
-
-        // Skills array filters
-        () => {
-            return {
-                $and: [
-                    { skills: { $exists: true, $type: "array" } },
-                    { skills: { $size: getRandomInt(1, 5) } },
-                    { department: { $in: ["engineering", "marketing"] } },
-                ],
-            };
-        },
-
-        // Name length filters
-        () => {
-            const minLength = getRandomInt(8, 15);
-            const maxLength = minLength + Math.ceil(targetPercentage * 10);
-            return {
-                $expr: {
-                    $and: [
-                        { $gte: [{ $strLenCP: "$name" }, minLength] },
-                        { $lte: [{ $strLenCP: "$name" }, maxLength] },
-                    ],
-                },
-            };
-        },
-
-        // Complex property existence checks
-        () => {
-            const propCount = Math.ceil(targetPercentage * 10) + 2;
-            const conditions = [];
-            for (let i = 0; i < propCount; i++) {
-                const propName = `prop_${getRandomInt(0, 39)}`;
-                conditions.push({ [propName]: { $exists: true } });
-            }
-            return { $and: conditions };
-        },
-
-        // Mixed data type filters on random properties
-        () => {
-            const prop1 = `prop_${getRandomInt(0, 39)}`;
-            const prop2 = `prop_${getRandomInt(0, 39)}`;
-
-            return {
-                $or: [
-                    { [prop1]: { $type: "string" } },
-                    { [prop2]: { $type: "number", $mod: [2, 0] } }, // Even numbers
-                    { status: "active" },
-                ],
-            };
-        },
-
-        // Join date with property combination
-        () => {
-            const monthsBack = Math.ceil(targetPercentage * 36) + 6; // 6-42 months
-            const cutoffDate = new Date(
-                Date.now() - monthsBack * 30 * 24 * 60 * 60 * 1000,
-            );
-            const randomProp = `prop_${getRandomInt(0, 39)}`;
-
-            return {
-                $and: [
-                    { joinDate: { $gte: cutoffDate } },
-                    { [randomProp]: { $exists: true } },
-                    { isManager: targetPercentage <= 0.2 },
-                ],
-            };
-        },
-
-        () => {
-            if (targetPercentage <= 0.5) {
-                return {
-                    $or: [{ status: "active" }, { salary: { $gte: 80000 } }],
-                };
-            } else {
-                return {
-                    $or: [
-                        { status: { $in: ["active", "pending"] } },
-                        { salary: { $gte: 50000 } },
-                    ],
-                };
-            }
+    // Get basic stats without accumulating arrays
+    const basicStatsPipeline = [
+        {
+            $group: {
+                _id: null,
+                totalUsers: { $sum: 1 },
+                minAge: { $min: "$age" },
+                maxAge: { $max: "$age" },
+                avgAge: { $avg: "$age" },
+                minSalary: { $min: "$salary" },
+                maxSalary: { $max: "$salary" },
+                avgSalary: { $avg: "$salary" },
+                managerCount: { $sum: { $cond: ["$isManager", 1, 0] } },
+                minJoinDate: { $min: "$joinDate" },
+                maxJoinDate: { $max: "$joinDate" }
+            },
         },
     ];
 
-    const selectedFilter =
-        filterOptions[getRandomInt(0, filterOptions.length - 1)];
-    if (selectedFilter) {
-        return selectedFilter();
+    // Get counts for categorical fields separately
+    const statusCountsPipeline = [
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+    ];
+
+    const departmentCountsPipeline = [
+        { $group: { _id: "$department", count: { $sum: 1 } } }
+    ];
+
+    const locationCountsPipeline = [
+        { $group: { _id: "$location", count: { $sum: 1 } } }
+    ];
+
+    const emailDomainCountsPipeline = [
+        {
+            $project: {
+                domain: { $arrayElemAt: [{ $split: ["$email", "@"] }, 1] }
+            }
+        },
+        { $group: { _id: "$domain", count: { $sum: 1 } } }
+    ];
+
+    // Run all pipelines in parallel
+    const [
+        basicStatsResults,
+        statusCountsResults,
+        departmentCountsResults,
+        locationCountsResults,
+        emailDomainCountsResults
+    ] = await Promise.all([
+        usersCollection.aggregate(basicStatsPipeline).toArray(),
+        usersCollection.aggregate(statusCountsPipeline).toArray(),
+        usersCollection.aggregate(departmentCountsPipeline).toArray(),
+        usersCollection.aggregate(locationCountsPipeline).toArray(),
+        usersCollection.aggregate(emailDomainCountsPipeline).toArray()
+    ]);
+
+    const basicStats = basicStatsResults[0];
+    if (!basicStats) {
+        throw new Error("No user data found for analysis");
     }
-    // Fallback filter
-    return { age: { $gte: 20, $lte: 60 } };
+
+    // Convert results to count objects
+    const statusCounts: Record<string, number> = {};
+    statusCountsResults.forEach((item: any) => {
+        statusCounts[item._id] = item.count;
+    });
+
+    const departmentCounts: Record<string, number> = {};
+    departmentCountsResults.forEach((item: any) => {
+        departmentCounts[item._id] = item.count;
+    });
+
+    const locationCounts: Record<string, number> = {};
+    locationCountsResults.forEach((item: any) => {
+        locationCounts[item._id] = item.count;
+    });
+
+    const emailDomainCounts: Record<string, number> = {};
+    emailDomainCountsResults.forEach((item: any) => {
+        emailDomainCounts[item._id] = item.count;
+    });
+
+    cachedDistribution = {
+        totalUsers: basicStats.totalUsers,
+        ageStats: { min: basicStats.minAge, max: basicStats.maxAge, avg: basicStats.avgAge },
+        salaryStats: {
+            min: basicStats.minSalary,
+            max: basicStats.maxSalary,
+            avg: basicStats.avgSalary,
+        },
+        statusCounts,
+        departmentCounts,
+        locationCounts,
+        managerCount: basicStats.managerCount,
+        joinDateStats: { min: basicStats.minJoinDate, max: basicStats.maxJoinDate },
+        emailDomainCounts,
+    };
+
+    console.log("Data distribution analysis complete");
+    return cachedDistribution;
 }
 
-// Test the filter to ensure it returns the right amount of users
-export async function testUserFilter(
+// Generate precise filter by sampling actual data and calculating exact boundaries
+export async function generatePreciseUserFilter(
+    db: Db,
+    targetCount: number = 5000,
+    previousAttempts: Array<{filter: Record<string, any>, count: number}> = []
+): Promise<Record<string, any>> {
+    const usersCollection = db.collection('users');
+    const totalUsers = await usersCollection.countDocuments({});
+    
+    // If target count is >= total users, return match-all filter
+    if (targetCount >= totalUsers) {
+        return {};
+    }
+    
+    const targetPercentage = targetCount / totalUsers;
+    
+    // Strategy 1: Age-based filter using percentiles
+    if (Math.random() < 0.3) {
+        const agePercentiles = await usersCollection.aggregate([
+            { $sample: { size: 10000 } }, // Sample for performance
+            { $sort: { age: 1 } },
+            { $group: {
+                _id: null,
+                ages: { $push: "$age" }
+            }}
+        ]).toArray();
+        
+        const firstResult = agePercentiles[0];
+        if (firstResult && firstResult.ages?.length > 0) {
+            const ages = firstResult.ages;
+            const startIndex = Math.floor(Math.random() * (ages.length * (1 - targetPercentage)));
+            const endIndex = Math.min(startIndex + Math.ceil(ages.length * targetPercentage), ages.length - 1);
+            
+            return {
+                age: {
+                    $gte: ages[startIndex],
+                    $lte: ages[endIndex]
+                }
+            };
+        }
+    }
+    
+    // Strategy 2: Salary-based filter using percentiles  
+    if (Math.random() < 0.3) {
+        const salaryPercentiles = await usersCollection.aggregate([
+            { $sample: { size: 10000 } },
+            { $sort: { salary: 1 } },
+            { $group: {
+                _id: null,
+                salaries: { $push: "$salary" }
+            }}
+        ]).toArray();
+        
+        const firstSalaryResult = salaryPercentiles[0];
+        if (firstSalaryResult && firstSalaryResult.salaries?.length > 0) {
+            const salaries = firstSalaryResult.salaries;
+            const startIndex = Math.floor(Math.random() * (salaries.length * (1 - targetPercentage)));
+            const endIndex = Math.min(startIndex + Math.ceil(salaries.length * targetPercentage), salaries.length - 1);
+            
+            return {
+                salary: {
+                    $gte: salaries[startIndex],
+                    $lte: salaries[endIndex]
+                }
+            };
+        }
+    }
+    
+    // Strategy 3: Categorical filters (status, department, location) with exact counts
+    const categoricalStrategies = [
+        'status', 'department', 'location'
+    ];
+    
+    const field = categoricalStrategies[Math.floor(Math.random() * categoricalStrategies.length)];
+    const counts = await usersCollection.aggregate([
+        { $group: { _id: `$${field}`, count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+    ]).toArray();
+    
+    if (counts.length > 0) {
+        // Find combination of values that gets closest to target
+        let cumulative = 0;
+        const selectedValues = [];
+        
+        for (const item of counts) {
+            cumulative += item.count;
+            selectedValues.push(item._id);
+            
+            // If we're close to target or exceeded it, stop
+            if (cumulative >= targetCount) { // Target reached
+                break;
+            }
+        }
+        
+        if (selectedValues.length === 1 && selectedValues[0] !== undefined) {
+            if (field === 'status') return { status: selectedValues[0] };
+            if (field === 'department') return { department: selectedValues[0] };
+            if (field === 'location') return { location: selectedValues[0] };
+        } else if (selectedValues.length > 1) {
+            if (field === 'status') return { status: { $in: selectedValues } };
+            if (field === 'department') return { department: { $in: selectedValues } };
+            if (field === 'location') return { location: { $in: selectedValues } };
+        }
+    }
+    
+    // Strategy 4: Combined filters for fine-tuning
+    if (targetCount < totalUsers * 0.2) { // For smaller target counts, use AND logic
+        const strategies = [];
+        
+        // Add age constraint - be more conservative with range
+        const ageRange = 80 - 18;
+        const targetAgeRange = Math.max(5, Math.ceil(ageRange * Math.sqrt(targetPercentage * 0.8))); // Smaller range
+        const startAge = 18 + Math.floor(Math.random() * (ageRange - targetAgeRange));
+        strategies.push({ age: { $gte: startAge, $lte: startAge + targetAgeRange } });
+        
+        // Add department constraint for better targeting
+        if (targetCount < totalUsers * 0.1) {
+            const departments = ['engineering', 'marketing', 'sales'];
+            const selectedDept = departments[Math.floor(Math.random() * departments.length)];
+            strategies.push({ department: selectedDept });
+        }
+        
+        // Add manager constraint for very small targets
+        if (targetCount < totalUsers * 0.05) {
+            strategies.push({ isManager: true });
+        }
+        
+        return { $and: strategies };
+    }
+    
+    // Fallback: Use simple age range
+    const ageRangeSize = Math.ceil((80 - 18) * targetPercentage);
+    const startAge = 18 + Math.floor(Math.random() * (62 - ageRangeSize));
+    
+    return {
+        age: {
+            $gte: startAge,
+            $lte: startAge + ageRangeSize
+        }
+    };
+}
+
+// Generate and test filter using precise data analysis with retry logic
+export async function generateOptimalUserFilter(
     db: Db,
     targetCount: number = 5000,
 ): Promise<{
@@ -361,30 +284,55 @@ export async function testUserFilter(
     targetCount: number;
 }> {
     const usersCollection = db.collection("users");
-    let filter: Record<string, any>;
-    let count: number;
-
-    // Try different filters until we find one in the right range
-    let attempts = 0;
+    const marginOfError = Math.ceil(targetCount * 0.1);
     const minCount = targetCount;
-    const maxCount = targetCount + 100;
+    const maxCount = targetCount + marginOfError;
+    
+    let bestFilter: Record<string, any> = {};
+    let bestCount = 0;
+    let bestDistance = Infinity;
+    const previousAttempts: Array<{filter: Record<string, any>, count: number}> = [];
+    
+    // Try up to 10 attempts to get within the 10% margin
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const filter = await generatePreciseUserFilter(db, targetCount, previousAttempts);
+        const count = await usersCollection.countDocuments(filter);
+        
+        previousAttempts.push({ filter, count });
+        
+        // Calculate distance from target range
+        let distance = 0;
+        if (count < minCount) {
+            distance = minCount - count;
+        } else if (count > maxCount) {
+            distance = count - maxCount;
+        }
+        
+        // If perfect match within range, return immediately
+        if (distance === 0) {
+            console.log(`Filter: ${JSON.stringify(filter)}`);
+            console.log(`Target: ${targetCount}, Actual: ${count} users (✓ within 10% margin)`);
+            return { filter, count, targetCount };
+        }
+        
+        // Keep track of best attempt
+        if (distance < bestDistance) {
+            bestFilter = filter;
+            bestCount = count;
+            bestDistance = distance;
+        }
+    }
+    
+    // Return best attempt
+    const withinRange = bestCount >= minCount && bestCount <= maxCount;
+    console.log(`Filter: ${JSON.stringify(bestFilter)}`);
+    console.log(`Target: ${targetCount}, Actual: ${bestCount} users ${withinRange ? '(✓ within 10% margin)' : '(⚠ outside 10% margin)'}`);
 
-    do {
-        filter = generateUserFilter(targetCount);
-        count = await usersCollection.countDocuments(filter);
-        attempts++;
-    } while ((count < minCount || count > maxCount) && attempts < 100);
-
-    console.log(`Filter: ${JSON.stringify(filter)}`);
-    console.log(
-        `Target: ${targetCount}, Actual: ${count} users (attempts: ${attempts})`,
-    );
-
-    return { filter, count, targetCount };
+    return { filter: bestFilter, count: bestCount, targetCount };
 }
 
-// Generate multiple test filters with different target counts
-export async function generateTestFilters(
+// Generate multiple optimal test filters (fast and accurate)
+export async function generateOptimalTestFilters(
     db: Db,
     targetCounts: number[] = [1000, 2500, 5000, 7500, 10000],
 ): Promise<
@@ -392,27 +340,20 @@ export async function generateTestFilters(
 > {
     const filters = [];
 
-    console.log(`\nGenerating ${targetCounts.length} test filters...`);
+    console.log(`\nGenerating ${targetCounts.length} precise test filters...`);
 
     for (let i = 0; i < targetCounts.length; i++) {
         const targetCount = targetCounts[i];
         if (targetCount !== undefined) {
-            console.log(`\nTesting filter for ${targetCount} users:`);
-            const result = await testUserFilter(db, targetCount);
-
-            const withinRange =
-                result.count >= targetCount &&
-                result.count <= targetCount + 100;
-            if (!withinRange) {
-                console.log(
-                    `⚠ Skipping Filter ${i + 1}: ${result.count} users (⚠ outside range)`,
-                );
-                continue;
-            }
-
+            console.log(`\nGenerating filter for ${targetCount} users:`);
+            
+            const result = await generateOptimalUserFilter(db, targetCount);
+            const marginOfError = Math.ceil(targetCount * 0.1);
+            const withinRange = result.count >= targetCount && result.count <= targetCount + marginOfError;
+            
             filters.push(result);
             console.log(
-                `✓ Filter ${i + 1}: ${result.count} users (✓ within range)`,
+                `✓ Filter ${i + 1}: ${result.count} users ${withinRange ? '(✓ within 10% margin)' : '(⚠ outside 10% margin)'}`
             );
         }
     }
@@ -420,3 +361,34 @@ export async function generateTestFilters(
     return filters;
 }
 
+// Legacy function - deprecated
+export function generateUserFilter(
+    targetCount: number = 5000,
+    distribution?: DataDistribution
+): Record<string, any> {
+    throw new Error('generateUserFilter is deprecated. Use generatePreciseUserFilter(db, targetCount) instead.');
+}
+
+// Legacy function for backward compatibility (slow)
+export async function testUserFilter(
+    db: Db,
+    targetCount: number = 5000,
+): Promise<{
+    filter: Record<string, any>;
+    count: number;
+    targetCount: number;
+}> {
+    console.warn('Warning: testUserFilter is deprecated. Use generateOptimalUserFilter instead.');
+    return generateOptimalUserFilter(db, targetCount);
+}
+
+// Legacy function for backward compatibility (slow) 
+export async function generateTestFilters(
+    db: Db,
+    targetCounts: number[] = [1000, 2500, 5000, 7500, 10000],
+): Promise<
+    Array<{ filter: Record<string, any>; count: number; targetCount: number }>
+> {
+    console.warn('Warning: generateTestFilters is deprecated. Use generateOptimalTestFilters instead.');
+    return generateOptimalTestFilters(db, targetCounts);
+}
