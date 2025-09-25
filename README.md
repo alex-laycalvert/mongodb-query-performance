@@ -12,7 +12,7 @@ Testing the performance of MongoDB queries where documents in one collection mus
 1. Find query with `$in` operator: `.find` query using `$in` to filter documents based on user IDs.
 2. Aggregation pipeline with `$in` operator: `.aggregate` pipeline using `$in` to filter documents based on user IDs.
 3. Aggregation pipeline with `$lookup`: `.aggregate` pipeline using `$lookup` to join `documents` with `users` and filter based on user properties.
-4. (Skip/Limit Paginated) Find query with `$in` operator: Paginated `.find` query using `$in` to filter documents based on user IDs. Uses a second `.totalDocuments` query to get total count.
+4. (Skip/Limit Paginated) Find query with `$in` operator: Paginated `.find` query using `$in` to filter documents based on user IDs. Uses a second `.countDocuments` query to get total count.
 5. (Skip/Limit Paginated) Aggregation pipeline with `$in` operator: Paginated `.aggregate` pipeline using `$in` to filter documents based on user IDs. Uses a `$facet` stage to get total count.
 6. (Skip/Limit Paginated) Aggregation pipeline with `$lookup`: Paginated `.aggregate` pipeline using `$lookup` to join `documents` with `users` and filter based on user properties. Uses a `$facet` stage to get total count.
 
