@@ -123,7 +123,7 @@ async function main() {
                         {
                             $lookup: {
                                 from: "users",
-                                as: "user",
+                                as: "users",
                                 let: { userId: "$user" },
                                 pipeline: [
                                     { $match: filter },
@@ -221,7 +221,7 @@ async function main() {
                             {
                                 $lookup: {
                                     from: "users",
-                                    as: "user",
+                                    as: "users",
                                     let: { userId: "$user" },
                                     pipeline: [
                                         { $match: filter },
