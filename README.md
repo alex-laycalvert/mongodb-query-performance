@@ -1,72 +1,42 @@
 # mongodb-query-performance
 
-Testing the performance of MongoDB `find` and `aggregate` queries in the following languages (and drivers):
+Testing the performance of MongoDB queries where documents in one collection must be filtered by filters on referenced documents in another collection.
 
-- JavaScript (Native MongoDB driver)
-- JavaScript (Mongoose)
-- Python (PyMongo)
+## Collections
 
-## Setup
+- `users` - Contains user documents with a random amount of properties/values.
+- `documents` - Contains documents that reference users via the `userId` property and have their own properties/values.
 
-The following collections will be stored in MongoDB:
+## Queries
 
-- `users`
+1. Find query with `$in` operator: `.find` query using `$in` to filter documents based on user IDs.
+2. Aggregation pipeline with `$in` operator: `.aggregate` pipeline using `$in` to filter documents based on user IDs.
+3. Aggregation pipeline with `$lookup`: `.aggregate` pipeline using `$lookup` to join `documents` with `users` and filter based on user properties.
+4. (Skip/Limit Paginated) Find query with `$in` operator: Paginated `.find` query using `$in` to filter documents based on user IDs. Uses a second `.totalDocuments` query to get total count.
+5. (Skip/Limit Paginated) Aggregation pipeline with `$in` operator: Paginated `.aggregate` pipeline using `$in` to filter documents based on user IDs. Uses a `$facet` stage to get total count.
+6. (Skip/Limit Paginated) Aggregation pipeline with `$lookup`: Paginated `.aggregate` pipeline using `$lookup` to join `documents` with `users` and filter based on user properties. Uses a `$facet` stage to get total count.
 
-```json
-{
-    "_id": "ObjectId",
-    "group": "ObjectId (groups)",
-    "profile": {
-        "firstName": "string",
-        "lastName": "string",
-        "email": "string"
-    }
-}
+## Usage
+
+1. Ensure you have a running instance of MongoDB.
+2. Run `index.ts` with the `--seed` flag:
+
+```bash
+bun run ./index.ts --seed
 ```
 
-- `groups`
+> NOTE: This delete all existing seeded data and re-seeds the database. THIS WILL TAKE A WHILE.
 
-```json
-{
-    "_id": "ObjectId",
-    "name": "string"
-}
+Optionally, you can just re-seed the filters (`filters.json`) with the `--seed-filters` flag:
+
+```bash
+bun run ./index.ts --seed-filters
 ```
 
-- `requests`
+> NOTE: Useful if you want to test queries on your own with user filters for specified number of users.
 
-```json
-{
-    "_id": "ObjectId",
-    "type": "string",
-    "status": "string",
-    "user": "ObjectId (users)",
-    "createdBy": "ObjectId (users)"
-}
+Running the script without any flags will run based on assumed existing data (and `filters.json`):
+
+```bash
+bun run ./index.ts
 ```
-
-## Execution
-
-The goal of each function/query will be to transform all documents in `requests` into the following format:
-
-```json
-{
-    "request_id": "string",
-    "request_type": "string",
-    "request_status": "string",
-    "user_id": "string",
-    "user_first_name": "string",
-    "user_last_name": "string",
-    "user_email": "string",
-    "user_group_id": "string",
-    "user_group_name": "string",
-    "created_by_id": "string",
-    "created_by_first_name": "string",
-    "created_by_last_name": "string",
-    "created_by_email": "string"
-    "created_by_group_id": "string",
-    "created_by_group_name": "string"
-}
-```
-
-Each language will perform this via both a `find` query and an `aggregate` query.
