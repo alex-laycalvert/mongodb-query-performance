@@ -1,5 +1,7 @@
 import type { Db, ObjectId } from "mongodb";
 
+const batchSize = 10_000; // Smaller batch size for memory efficiency
+
 // Generate random data utilities
 function getRandomInt(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -158,7 +160,6 @@ export async function seedUsers(
     // Clear existing data
     await usersCollection.deleteMany({});
 
-    const batchSize = 1000;
     const userIds: ObjectId[] = [];
 
     for (let i = 0; i < totalUsers; i += batchSize) {
@@ -183,7 +184,7 @@ export async function seedUsers(
     return userIds;
 }
 
-// Seed documents collection with 1000 documents per user
+// Seed documents collection with specified documents per user using streaming approach
 export async function seedDocuments(
     db: Db,
     userIds: ObjectId[],
@@ -196,54 +197,59 @@ export async function seedDocuments(
     await documentsCollection.deleteMany({});
 
     const totalDocuments = userIds.length * docsPerUser;
+    let totalInserted = 0;
 
-    console.log(`Generating ${totalDocuments} document objects...`);
-    const startGenTime = Date.now();
+    console.log(
+        `Seeding ${totalDocuments} documents using streaming approach...`,
+    );
+    const startTime = Date.now();
 
-    // Generate all documents first
-    const allDocuments: Record<string, any>[] = [];
+    // Process users in chunks to avoid memory issues
+    const userChunkSize = Math.floor(batchSize / docsPerUser) || 1; // At least 1 user per chunk
 
-    for (let userIndex = 0; userIndex < userIds.length; userIndex++) {
-        const userId = userIds[userIndex];
-        if (userId) {
-            for (let docIndex = 0; docIndex < docsPerUser; docIndex++) {
-                allDocuments.push(generateDocument(userId));
+    for (
+        let userStartIndex = 0;
+        userStartIndex < userIds.length;
+        userStartIndex += userChunkSize
+    ) {
+        const userEndIndex = Math.min(
+            userStartIndex + userChunkSize,
+            userIds.length,
+        );
+        const batch: Record<string, any>[] = [];
+
+        // Generate documents for this chunk of users
+        for (
+            let userIndex = userStartIndex;
+            userIndex < userEndIndex;
+            userIndex++
+        ) {
+            const userId = userIds[userIndex];
+            if (userId) {
+                for (let docIndex = 0; docIndex < docsPerUser; docIndex++) {
+                    batch.push(generateDocument(userId));
+                }
             }
         }
 
-        // Progress logging during generation
-        if ((userIndex + 1) % 10000 === 0 || userIndex === userIds.length - 1) {
+        // Insert this batch
+        if (batch.length > 0) {
+            await documentsCollection.insertMany(batch);
+            totalInserted += batch.length;
+        }
+
+        // Progress logging
+        if (totalInserted % 50000 === 0 || userEndIndex >= userIds.length) {
+            const progress = ((userEndIndex / userIds.length) * 100).toFixed(1);
             console.log(
-                `Generated documents for ${userIndex + 1} users (${allDocuments.length} total documents)`,
+                `Inserted ${totalInserted} documents (${progress}% complete)`,
             );
         }
     }
 
-    const genTime = Date.now() - startGenTime;
-    console.log(`Document generation completed in ${genTime / 1000} seconds`);
-
-    // Now batch insert all documents
-    console.log("Starting batch insertions...");
-    const startInsertTime = Date.now();
-    const batchSize = 10000;
-    let totalInserted = 0;
-
-    for (let i = 0; i < allDocuments.length; i += batchSize) {
-        const batch = allDocuments.slice(i, i + batchSize);
-        await documentsCollection.insertMany(batch);
-        totalInserted += batch.length;
-
-        if (
-            totalInserted % 50000 === 0 ||
-            i + batchSize >= allDocuments.length
-        ) {
-            console.log(`Inserted ${totalInserted} documents`);
-        }
-    }
-
-    const insertTime = Date.now() - startInsertTime;
+    const totalTime = Date.now() - startTime;
     console.log(
-        `Finished seeding ${totalInserted} documents in ${insertTime / 1000} seconds`,
+        `Finished seeding ${totalInserted} documents in ${totalTime / 1000} seconds`,
     );
 }
 
@@ -269,4 +275,3 @@ export async function seedDatabase(
     console.log(`Total users: ${userIds.length}`);
     console.log(`Total documents: ${userIds.length * 1000}`);
 }
-

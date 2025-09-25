@@ -12,9 +12,11 @@ const AGGREGATION_WITH_LOOKUP = "Aggregation with $lookup Query Time";
 // Main execution
 async function main() {
     const db = await connectToMongoDB();
-    // Seed the database
-    await seedDatabase(db, 250_000, 100);
-    process.exit(0);
+
+    if (process.argv.includes("--seed")) {
+        // Seed the database
+        await seedDatabase(db, 250_000, 100);
+    }
 
     // Connect and test filters
     console.log("\nConnecting to test filters...");
@@ -22,9 +24,13 @@ async function main() {
     console.log("\nTesting user filters with different target counts...");
 
     // Test filters with various target counts
-    const filters = await generateTestFilters(db, [
-        /* 100, 500, 1_000, 2_500, 5_000, 10_000, 25_000, */ 50_000,
-    ]);
+    const filters = await generateTestFilters(
+        db,
+        [
+            10, 100, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000,
+            150_000, 200_000,
+        ],
+    );
 
     const usersCollection = db.collection("users");
     const documentsCollection = db.collection("documents");
