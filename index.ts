@@ -94,7 +94,7 @@ async function main() {
                     .toArray();
                 const userIds1 = users1.map((user) => user._id);
                 return await documentsCollection
-                    .find({ userId: { $in: userIds1 } })
+                    .find({ user: { $in: userIds1 } })
                     .sort({ _id: 1 })
                     .toArray();
             })();
@@ -109,7 +109,7 @@ async function main() {
                 const userIds2 = users2.map((user) => user._id);
                 return await documentsCollection
                     .aggregate([
-                        { $match: { userId: { $in: userIds2 } } },
+                        { $match: { user: { $in: userIds2 } } },
                         { $sort: { _id: 1 } },
                     ])
                     .toArray();
@@ -124,13 +124,13 @@ async function main() {
                             $lookup: {
                                 from: "users",
                                 as: "user",
-                                let: { userId: "$userId" },
+                                let: { userId: "$user" },
                                 pipeline: [
                                     { $match: filter },
                                     {
                                         $match: {
                                             $expr: {
-                                                $eq: ["$userId", "$$userId"],
+                                                $eq: ["$_id", "$$userId"],
                                             },
                                         },
                                     },
@@ -174,13 +174,13 @@ async function main() {
                 const userIds1 = users1.map((user) => user._id);
                 return await Promise.all([
                     documentsCollection
-                        .find({ userId: { $in: userIds1 } })
+                        .find({ user: { $in: userIds1 } })
                         .sort({ _id: 1 })
                         .skip(skip)
                         .limit(limit)
                         .toArray(),
                     documentsCollection.countDocuments({
-                        userId: { $in: userIds1 },
+                        user: { $in: userIds1 },
                     }),
                 ]);
             })();
@@ -196,7 +196,7 @@ async function main() {
                 const [{ data: documents2, total: documents2Total }] =
                     await documentsCollection
                         .aggregate<any>([
-                            { $match: { userId: { $in: userIds2 } } },
+                            { $match: { user: { $in: userIds2 } } },
                             {
                                 $facet: {
                                     data: [
@@ -222,16 +222,13 @@ async function main() {
                                 $lookup: {
                                     from: "users",
                                     as: "user",
-                                    let: { userId: "$userId" },
+                                    let: { userId: "$user" },
                                     pipeline: [
                                         { $match: filter },
                                         {
                                             $match: {
                                                 $expr: {
-                                                    $eq: [
-                                                        "$userId",
-                                                        "$$userId",
-                                                    ],
+                                                    $eq: ["$_id", "$$userId"],
                                                 },
                                             },
                                         },
