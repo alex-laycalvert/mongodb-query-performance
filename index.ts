@@ -43,6 +43,7 @@ const nonPaginatedMethods: { method: NonPaginatedQueryMethod; name: string }[] =
             method: aggregationOnUsersWithLookupStreaming,
             name: "Aggregation on users with $lookup (streaming) Query Time",
         },
+        // Omitted due to performance
         // {
         //     method: aggregationOnDocumentsWithLookup,
         //     name: "Aggregation on documents with $lookup Query Time",
@@ -70,6 +71,7 @@ const paginatedMethods: { method: PaginatedQueryMethod; name: string }[] = [
         method: aggregationOnUsersWithLookupSkip,
         name: "Aggregation on users with $lookup Query Time (Skip paginated)",
     },
+    // Omitted due to performance
     // {
     //     method: aggregationOnDocumentsWithLookupSkip,
     //     name: "Aggregation on documents with $lookup Query Time (Skip paginated)",
@@ -109,14 +111,16 @@ async function main() {
 
     const usersCollection = db.collection("users");
     const documentsCollection = db.collection("documents");
-    const maxUsers = await usersCollection.estimatedDocumentCount();
+    const estimatedUsers = await usersCollection.estimatedDocumentCount();
+    const estimatedDocuments =
+        await documentsCollection.estimatedDocumentCount();
 
     if (values.seed || values["seed-filters"]) {
         // Test filters with various target counts
         const filters = await generateOptimalTestFilters(
             db,
             [100, 1_000, 5_000, 10_000, 25_000, 50_000, 75_000, 100_000].filter(
-                (n) => n <= maxUsers,
+                (n) => n <= estimatedUsers,
             ),
         );
 
@@ -153,7 +157,10 @@ async function main() {
         filter: Record<string, any>;
         targetCount: number;
         actualCount: number;
-        results: (Omit<QueryMethodResult<any>, "lastResults"> & {})[];
+        results: (Omit<QueryMethodResult<any>, "lastResults"> & {
+            methodName: string;
+            pagination: "none" | "skip" | "cursor";
+        })[];
     }[] = [];
     for (const { filter, actualCount, targetCount } of filters) {
         console.log(
@@ -293,35 +300,65 @@ async function main() {
             }
         }
 
-        const formattedResults = Object.entries({
-            ...nonPaginatedResults,
-            ...paginatedResults,
-        }).reduce<
-            (Omit<QueryMethodResult<any>, "lastResults"> & {
-                methodName: string;
-            })[]
-        >((acc, [methodName, result]) => {
-            acc.push({
-                methodName,
-                averageTimeMs: result.averageTimeMs,
-                totalTimeMs: result.totalTimeMs,
-                numIterations: result.numIterations,
-                iterationTimesMs: result.iterationTimesMs,
-            });
-            return acc;
-        }, []);
+        const formattedNonPaginatedResults = Object.entries(
+            nonPaginatedResults,
+        ).reduce<(typeof filterResults)[number]["results"]>(
+            (acc, [methodName, result]) => {
+                acc.push({
+                    methodName,
+                    pagination: "none",
+                    averageTimeMs: result.averageTimeMs,
+                    totalTimeMs: result.totalTimeMs,
+                    numIterations: result.numIterations,
+                    iterationTimesMs: result.iterationTimesMs,
+                });
+                return acc;
+            },
+            [],
+        );
+
+        const formattedPaginatedResults = Object.entries(
+            paginatedResults,
+        ).reduce<(typeof filterResults)[number]["results"]>(
+            (acc, [methodName, result]) => {
+                acc.push({
+                    methodName,
+                    pagination: "skip",
+                    averageTimeMs: result.averageTimeMs,
+                    totalTimeMs: result.totalTimeMs,
+                    numIterations: result.numIterations,
+                    iterationTimesMs: result.iterationTimesMs,
+                });
+                return acc;
+            },
+            [],
+        );
 
         filterResults.push({
             filter,
             targetCount,
             actualCount,
-            results: formattedResults,
+            results: [
+                ...formattedNonPaginatedResults,
+                ...formattedPaginatedResults,
+            ],
         });
     }
 
     // Write results to JSON file
     console.log(`\nWriting results to ${values.output}...`);
-    await writeFile(values.output, JSON.stringify(filterResults, null, 2));
+    await writeFile(
+        values.output,
+        JSON.stringify(
+            {
+                totalEstimatedUsers: estimatedUsers,
+                totalEstimatedDocuments: estimatedDocuments,
+                results: filterResults,
+            },
+            null,
+            2,
+        ),
+    );
 
     await closeMongoDB();
     console.log("\nCompleted successfully!");
