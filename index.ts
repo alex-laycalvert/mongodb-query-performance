@@ -43,10 +43,10 @@ const nonPaginatedMethods: { method: NonPaginatedQueryMethod; name: string }[] =
             method: aggregationOnUsersWithLookupStreaming,
             name: "Aggregation on users with $lookup (streaming) Query Time",
         },
-        {
-            method: aggregationOnDocumentsWithLookup,
-            name: "Aggregation on documents with $lookup Query Time",
-        },
+        // {
+        //     method: aggregationOnDocumentsWithLookup,
+        //     name: "Aggregation on documents with $lookup Query Time",
+        // },
     ];
 
 type PaginatedQueryMethod = (
@@ -70,10 +70,10 @@ const paginatedMethods: { method: PaginatedQueryMethod; name: string }[] = [
         method: aggregationOnUsersWithLookupSkip,
         name: "Aggregation on users with $lookup Query Time (Skip paginated)",
     },
-    {
-        method: aggregationOnDocumentsWithLookupSkip,
-        name: "Aggregation on documents with $lookup Query Time (Skip paginated)",
-    },
+    // {
+    //     method: aggregationOnDocumentsWithLookupSkip,
+    //     name: "Aggregation on documents with $lookup Query Time (Skip paginated)",
+    // },
 ];
 
 type QueryMethodResult<T> = {
@@ -354,10 +354,10 @@ async function aggregationOnDocumentsWithIn(
         .toArray();
     const userIds2 = users2.map((user) => user._id);
     return await documentsCollection
-        .aggregate([
-            { $match: { user: { $in: userIds2 } } },
-            { $sort: { _id: 1 } },
-        ])
+        .aggregate(
+            [{ $match: { user: { $in: userIds2 } } }, { $sort: { _id: 1 } }],
+            { allowDiskUse: true },
+        )
         .toArray();
 }
 
@@ -367,20 +367,23 @@ async function aggregationOnUsersWithLookup(
     _documentsCollection: Collection,
 ) {
     return await usersCollection
-        .aggregate([
-            { $match: filter },
-            {
-                $lookup: {
-                    from: "documents",
-                    as: "documents",
-                    localField: "_id",
-                    foreignField: "user",
+        .aggregate(
+            [
+                { $match: filter },
+                {
+                    $lookup: {
+                        from: "documents",
+                        as: "documents",
+                        localField: "_id",
+                        foreignField: "user",
+                    },
                 },
-            },
-            { $unwind: "$documents" },
-            { $replaceRoot: { newRoot: "$documents" } },
-            { $sort: { _id: 1 } },
-        ])
+                { $unwind: "$documents" },
+                { $replaceRoot: { newRoot: "$documents" } },
+                { $sort: { _id: 1 } },
+            ],
+            { allowDiskUse: true },
+        )
         .toArray();
 }
 
@@ -405,7 +408,7 @@ async function aggregationOnUsersWithLookupStreaming(
             { $replaceRoot: { newRoot: "$documents" } },
             { $sort: { _id: 1 } },
         ],
-        { batchSize: 1000 },
+        { batchSize: 1000, allowDiskUse: true },
     );
 
     for await (const doc of cursor) {
@@ -421,33 +424,36 @@ async function aggregationOnDocumentsWithLookup(
     documentsCollection: Collection,
 ) {
     return await documentsCollection
-        .aggregate([
-            { $sort: { _id: 1 } },
-            {
-                $lookup: {
-                    from: "users",
-                    as: "users",
-                    let: { userId: "$user" },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $eq: ["$_id", "$$userId"],
+        .aggregate(
+            [
+                { $sort: { _id: 1 } },
+                {
+                    $lookup: {
+                        from: "users",
+                        as: "users",
+                        let: { userId: "$user" },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $eq: ["$_id", "$$userId"],
+                                    },
                                 },
                             },
-                        },
-                        { $match: filter },
-                        { $limit: 1 },
-                    ],
+                            { $match: filter },
+                            { $limit: 1 },
+                        ],
+                    },
                 },
-            },
-            {
-                $match: {
-                    "users.0": { $exists: true },
+                {
+                    $match: {
+                        "users.0": { $exists: true },
+                    },
                 },
-            },
-            { $project: { users: 0 } },
-        ])
+                { $project: { users: 0 } },
+            ],
+            { allowDiskUse: true },
+        )
         .toArray();
 }
 
@@ -490,19 +496,22 @@ async function aggregationOnDocumentsWithInSkip(
     const userIds2 = users2.map((user) => user._id);
     const [{ data: documents2, total: documents2Total }] =
         await documentsCollection
-            .aggregate<any>([
-                { $match: { user: { $in: userIds2 } } },
-                {
-                    $facet: {
-                        data: [
-                            { $sort: { _id: 1 } },
-                            { $skip: skip },
-                            { $limit: limit },
-                        ],
-                        total: [{ $count: "total" }],
+            .aggregate<any>(
+                [
+                    { $match: { user: { $in: userIds2 } } },
+                    {
+                        $facet: {
+                            data: [
+                                { $sort: { _id: 1 } },
+                                { $skip: skip },
+                                { $limit: limit },
+                            ],
+                            total: [{ $count: "total" }],
+                        },
                     },
-                },
-            ])
+                ],
+                { allowDiskUse: true },
+            )
             .toArray();
     return [documents2, documents2Total?.[0]?.total ?? 0];
 }
@@ -514,29 +523,32 @@ async function aggregationOnUsersWithLookupSkip(
     limit: number,
 ): Promise<[any[], number]> {
     const [{ data: documents3, total: documents3Total }] = await usersCollection
-        .aggregate<any>([
-            { $match: filter },
-            {
-                $lookup: {
-                    from: "documents",
-                    as: "documents",
-                    localField: "_id",
-                    foreignField: "user",
+        .aggregate<any>(
+            [
+                { $match: filter },
+                {
+                    $lookup: {
+                        from: "documents",
+                        as: "documents",
+                        localField: "_id",
+                        foreignField: "user",
+                    },
                 },
-            },
-            { $unwind: "$documents" },
-            { $replaceRoot: { newRoot: "$documents" } },
-            {
-                $facet: {
-                    data: [
-                        { $sort: { _id: 1 } },
-                        { $skip: skip },
-                        { $limit: limit },
-                    ],
-                    total: [{ $count: "total" }],
+                { $unwind: "$documents" },
+                { $replaceRoot: { newRoot: "$documents" } },
+                {
+                    $facet: {
+                        data: [
+                            { $sort: { _id: 1 } },
+                            { $skip: skip },
+                            { $limit: limit },
+                        ],
+                        total: [{ $count: "total" }],
+                    },
                 },
-            },
-        ])
+            ],
+            { allowDiskUse: true },
+        )
         .toArray();
     return [documents3, documents3Total?.[0]?.total ?? 0];
 }
@@ -549,39 +561,42 @@ async function aggregationOnDocumentsWithLookupSkip(
     limit: number,
 ): Promise<[any[], number]> {
     const [{ data, total }] = await documentsCollection
-        .aggregate<any>([
-            { $sort: { _id: 1 } },
-            {
-                $lookup: {
-                    from: "users",
-                    as: "users",
-                    let: { userId: "$user" },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $eq: ["$_id", "$$userId"],
+        .aggregate<any>(
+            [
+                { $sort: { _id: 1 } },
+                {
+                    $lookup: {
+                        from: "users",
+                        as: "users",
+                        let: { userId: "$user" },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $eq: ["$_id", "$$userId"],
+                                    },
                                 },
                             },
-                        },
-                        { $match: filter },
-                        { $limit: 1 },
-                    ],
+                            { $match: filter },
+                            { $limit: 1 },
+                        ],
+                    },
                 },
-            },
-            {
-                $match: {
-                    "users.0": { $exists: true },
+                {
+                    $match: {
+                        "users.0": { $exists: true },
+                    },
                 },
-            },
-            { $project: { users: 0 } },
-            {
-                $facet: {
-                    data: [{ $skip: skip }, { $limit: limit }],
-                    total: [{ $count: "total" }],
+                { $project: { users: 0 } },
+                {
+                    $facet: {
+                        data: [{ $skip: skip }, { $limit: limit }],
+                        total: [{ $count: "total" }],
+                    },
                 },
-            },
-        ])
+            ],
+            { allowDiskUse: true },
+        )
         .toArray();
 
     return [data, total?.[0]?.total ?? 0];
