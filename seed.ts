@@ -149,10 +149,10 @@ function generateDocument(userId: ObjectId): Record<string, any> {
     return doc;
 }
 
-// Seed users collection with 100k documents
+// Seed users collection with 50k documents
 export async function seedUsers(
     db: Db,
-    totalUsers: number = 100_000,
+    totalUsers: number = 50_000,
 ): Promise<ObjectId[]> {
     console.log("Starting to seed users...");
     const usersCollection = db.collection("users");
