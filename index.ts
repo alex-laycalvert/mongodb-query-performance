@@ -146,8 +146,8 @@ async function main() {
         "utf-8",
     ).then((data) => JSON.parse(data));
 
-    console.log("\tRunning tests with the following parameters:");
-    console.log(`\t- Iterations per method: ${values.iterations}`);
+    console.log("\nRunning tests with the following parameters:");
+    console.log(`  - Iterations per method: ${values.iterations}`);
 
     const filterResults: {
         filter: Record<string, any>;
@@ -165,6 +165,7 @@ async function main() {
             QueryMethodResult<any[]>
         > = {};
         for (const method of nonPaginatedMethods) {
+            console.log(`  - Testing method: ${method.name}`);
             for (let i = 0; i < +values.iterations; i++) {
                 const start = Date.now();
                 const results = await method.method(
@@ -230,6 +231,7 @@ async function main() {
             QueryMethodResult<[any[], number]>
         > = {};
         for (const method of paginatedMethods) {
+            console.log(`  - Testing method: ${method.name}`);
             for (let i = 0; i < +values.iterations; i++) {
                 const start = Date.now();
                 const results = await method.method(
