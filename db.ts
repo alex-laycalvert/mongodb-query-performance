@@ -15,7 +15,7 @@ export async function connectToMongoDB(): Promise<Db> {
     client = new MongoClient(MONGODB_URI);
     await client.connect();
     db = client.db(DB_NAME);
-    await db.createIndex("documents", { user: 1 });
+    await db.createIndex("documents", { user: 1, _id: 1 });
     console.log("Connected to MongoDB");
     return db;
 }

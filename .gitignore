@@ -2,3 +2,4 @@ node_modules/
 __pycache__/
 filters.json
 results.txt
+results.json
